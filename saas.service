@@ -1,0 +1,9 @@
+[Unit]
+Description=Spatch As A Service
+After=network.target
+
+[Service]
+ExecStart=/usr/sbin/saas -addr ":2020" -patchcache /var/cache/saas/patches -tarcache /var/cache/saas/tarballs
+
+[Install]
+WantedBy=multi-user.target
