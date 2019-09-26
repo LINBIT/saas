@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 ExecStart=/usr/sbin/saas -addr ":2020" -patchcache /var/cache/saas/patches -tarcache /var/cache/saas/tarballs
+StandardInput=tty-force
 
 [Install]
 WantedBy=multi-user.target
