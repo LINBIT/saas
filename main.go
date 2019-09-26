@@ -258,7 +258,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 	cmd = exec.Command("make", "-C", filepath.Join(dir, intarballName, "drbd"), "compat")
 	cmd.Stdin = os.Stdin // otherwise spatch fails if no tty
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("Could not run make:%s %v", filepath.Join(dir, intarballName, "drbd"), err)
+		return nil, fmt.Errorf("Could not successfully run 'make -C %s compat': %v", filepath.Join(dir, intarballName, "drbd"), err)
 	}
 
 	return ioutil.ReadFile(filepath.Join(cocciPath, "compat.patch"))
