@@ -102,7 +102,7 @@ func (s *server) updatePatchCache() error {
 		}
 	}
 
-	err := filepath.Walk(s.patchCachePath, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(s.patchCachePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,6 @@ func (s *server) updatePatchCache() error {
 		}
 		return nil
 	})
-	return err
 }
 
 func (s *server) updateTarballCache() error {
