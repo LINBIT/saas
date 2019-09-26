@@ -296,6 +296,14 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 	// add to cache
 	s.pl.Lock()
 	defer s.pl.Unlock()
+
+	// recheck, maybe somebody else added file to cache
+	// avoid adding it multiple times.
+	_, cached = s.patchCache[patchPath]
+	if cached {
+		return patch, nil
+	}
+
 	// don't fail hard, just don't add to cache
 	if _, err := os.Stat(patchDir); os.IsNotExist(err) {
 		if err := os.Mkdir(patchDir, 0755); err != nil {
