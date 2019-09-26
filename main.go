@@ -38,7 +38,7 @@ type server struct {
 
 	// probably stat() would be good enough
 	// keys are the complete file system path to the cached patch
-	patchCache     map[string]int
+	patchCache     map[string]struct{}
 	patchCachePath string
 
 	// keys are the complete file system path to the tarball
@@ -62,7 +62,7 @@ func main() {
 		router: mux.NewRouter(),
 
 		patchCachePath: *flagPatchCache,
-		patchCache:     make(map[string]int),
+		patchCache:     make(map[string]struct{}),
 
 		tarballCachePath: *flagTarballCache,
 		tarballCache:     make(map[string]struct{}),
@@ -115,7 +115,7 @@ func (s *server) updatePatchCache() error {
 		if strings.HasSuffix(info.Name(), ".patch") {
 			if abs, err := filepath.Abs(path); err == nil {
 				log.Println("adding", abs, "to the patch cache")
-				s.patchCache[abs] = 0
+				s.patchCache[abs] = struct{}{}
 			}
 		}
 		return nil
@@ -280,15 +280,13 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 		return nil, err
 	}
 
-	s.pl.Lock()
-	n, cached := s.patchCache[patchPath]
-	log.Printf("Patch '%s'; reqest #%d", patchName, n+1)
+	s.pl.RLock()
+	_, cached := s.patchCache[patchPath]
 	if cached {
-		s.patchCache[patchPath]++
-		s.pl.Unlock()
+		s.pl.RUnlock()
 		return ioutil.ReadFile(patchPath)
 	}
-	s.pl.Unlock()
+	s.pl.RUnlock()
 
 	patch, err := s.newPatch(body, drbdversion)
 	if err != nil {
@@ -314,7 +312,7 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 		}
 		return patch, nil
 	}
-	s.patchCache[patchPath] = 1
+	s.patchCache[patchPath] = struct{}{}
 
 	return patch, nil
 }
