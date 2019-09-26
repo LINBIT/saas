@@ -27,6 +27,8 @@ var (
 	flagTarballCache = flag.String("tarcache", ".", "Path to the tarball cache")
 	flagMaxBytesBody = flag.Int("maxbytesbody", 250*1024, "Maximum nunber of bytes in the body")
 	flagKeepTmpDir   = flag.Bool("keeptmpdir", false, "Do not delete the temporary directory, useful for debugging")
+	flagCertFile     = flag.String("certfile", "", "Path to a TLS cert file")
+	flagKeyFile      = flag.String("keyfile", "", "Path to a TLS key file")
 )
 
 const tarballURLBase = "https://www.linbit.com/downloads/drbd/"
@@ -83,7 +85,11 @@ func main() {
 		MaxHeaderBytes: 4 * 1024,
 	}
 
-	log.Fatal(server.ListenAndServe())
+	if *flagCertFile != "" && *flagKeyFile != "" {
+		log.Fatal(server.ListenAndServeTLS(*flagCertFile, *flagKeyFile))
+	} else {
+		log.Fatal(server.ListenAndServe())
+	}
 }
 
 // handler interface, wrapped for MaxBytesReader
