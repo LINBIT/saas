@@ -248,9 +248,17 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 	if err := os.Mkdir(cocciPath, 0755); err != nil {
 		return nil, fmt.Errorf("Could not create cocci dir: %v", err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(cocciPath, "compat.h"), compath, 0644); err != nil {
+
+	compathPath := filepath.Join(cocciPath, "compat.h")
+	if err := ioutil.WriteFile(compathPath, compath, 0644); err != nil {
 		return nil, fmt.Errorf("Could not write compath.h: %v", err)
 	}
+	// cheap check
+	cmd = exec.Command("gcc", "-o", "/dev/null", compathPath)
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("Could not precompile compat.h, looks like it is invalid: %v", err)
+	}
+
 	if err := ioutil.WriteFile(filepath.Join(cocciPath, "kernelrelease.txt"), []byte{'_'}, 0644); err != nil {
 		return nil, fmt.Errorf("Could not write kernelrelease.txt: %v", err)
 	}
