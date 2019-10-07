@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 var (
@@ -29,6 +30,7 @@ var (
 	flagKeepTmpDir   = flag.Bool("keeptmpdir", false, "Do not delete the temporary directory, useful for debugging")
 	flagCertFile     = flag.String("certfile", "", "Path to a TLS cert file")
 	flagKeyFile      = flag.String("keyfile", "", "Path to a TLS key file")
+	flagDebug        = flag.Bool("debug", false, "Enable debug logging (otherwise production level log)")
 )
 
 const tarballURLBase = "https://www.linbit.com/downloads/drbd/"
@@ -49,6 +51,8 @@ type server struct {
 
 	maxBytesBody int64
 	keepTmpDir   bool
+
+	logger *zap.Logger
 }
 
 func main() {
@@ -70,12 +74,23 @@ func main() {
 		maxBytesBody: int64(*flagMaxBytesBody),
 		keepTmpDir:   *flagKeepTmpDir,
 	}
-
-	if err := s.updatePatchCache(); err != nil {
+	// additional setup
+	var err error
+	// if s.logger, err = zap.NewProduction(); err != nil {
+	if *flagDebug {
+		s.logger, err = zap.NewDevelopment()
+	} else {
+		s.logger, err = zap.NewProduction()
+	}
+	if err != nil {
 		log.Fatal(err)
 	}
-	if err := s.updateTarballCache(); err != nil {
-		log.Fatal(err)
+
+	if err = s.updatePatchCache(); err != nil {
+		s.logger.Fatal(err.Error())
+	}
+	if err = s.updateTarballCache(); err != nil {
+		s.logger.Fatal(err.Error())
 	}
 	s.routes()
 
@@ -114,7 +129,7 @@ func (s *server) updatePatchCache() error {
 		}
 		if strings.HasSuffix(info.Name(), ".patch") {
 			if abs, err := filepath.Abs(path); err == nil {
-				log.Println("adding", abs, "to the patch cache")
+				s.logger.Debug(fmt.Sprintf("adding %s to the patch cache", abs))
 				s.patchCache[abs] = struct{}{}
 			}
 		}
@@ -141,7 +156,7 @@ func (s *server) updateTarballCache() error {
 			continue
 		}
 		s.tarballCache[abs] = struct{}{}
-		log.Println("adding", abs, "to the tarball cache")
+		s.logger.Debug(fmt.Sprintf("adding %s to the tarball cache", abs))
 	}
 	s.tl.Unlock()
 	return nil
@@ -153,13 +168,13 @@ func (s *server) spatchCreate() http.HandlerFunc {
 
 		drbdversion, ok := mux.Vars(r)["drbdversion"]
 		if !ok || drbdversion == "" || len(drbdversion) > 42 {
-			errorf(http.StatusBadRequest, w, "Could not get valid drbdversion parameter")
+			s.errorf(http.StatusBadRequest, w, "Could not get valid drbdversion parameter")
 			return
 		}
 
 		patch, err := s.genPatch(r, drbdversion)
 		if err != nil {
-			errorf(http.StatusBadRequest, w, "Could not generate patch: %v", err)
+			s.errorf(http.StatusBadRequest, w, "Could not generate patch: %v", err)
 			// TODO(rck): maybe from this point on internal server error? We would need to differentiate
 			return
 		}
@@ -178,7 +193,6 @@ func fetchDRBDTarball(tarballName, dst string) error {
 	}
 
 	url := fmt.Sprintf("%s/%s/%s", tarballURLBase, vers, tarballName)
-	log.Println("Fetching", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -288,9 +302,16 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 		return nil, err
 	}
 
+	logEntry := logEntry{
+		drbdversion: drbdversion,
+		patch:       patchName,
+	}
+
 	s.pl.RLock()
 	_, cached := s.patchCache[patchPath]
+	logEntry.cached = cached
 	if cached {
+		s.logCacheInfo(ltCacheHit, logEntry)
 		s.pl.RUnlock()
 		return ioutil.ReadFile(patchPath)
 	}
@@ -308,14 +329,16 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 	// recheck, maybe somebody else added file to cache
 	// avoid adding it multiple times.
 	_, cached = s.patchCache[patchPath]
+	logEntry.cached = cached
 	if cached {
+		s.logCacheInfo(ltCacheElse, logEntry)
 		return patch, nil
 	}
 
 	// don't fail hard, just don't add to cache
 	if _, err := os.Stat(patchDir); os.IsNotExist(err) {
 		if err := os.Mkdir(patchDir, 0755); err != nil {
-			log.Println("Could not create patch cache directory")
+			s.logger.Error("Could not create patch cache directory", zap.String("type", ltError))
 			return patch, nil
 		}
 	}
@@ -323,18 +346,45 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 		// remove file so it does not land in the cache next time
 		if st, err := os.Stat(patchPath); err != nil && st.Mode().IsRegular() {
 			if err := os.Remove(patchPath); err != nil {
-				log.Printf("Critical - Could not delete broken cache file: %s", patchPath)
+				s.logger.Error(fmt.Sprintf("Critical - Could not delete broken cache file: %s", patchPath),
+					zap.String("type", ltError))
 			}
 		}
 		return patch, nil
 	}
 	s.patchCache[patchPath] = struct{}{}
 
+	s.logCacheInfo(ltCacheCold, logEntry)
 	return patch, nil
 }
 
-func errorf(code int, w http.ResponseWriter, format string, a ...interface{}) {
+func (s *server) errorf(code int, w http.ResponseWriter, format string, a ...interface{}) {
 	w.WriteHeader(code)
 	_, _ = fmt.Fprintf(w, format, a...)
-	log.Printf(format, a...)
+	s.logger.Error(fmt.Sprintf(format, a...),
+		zap.String("type", ltError),
+		zap.Int("code", code))
+}
+
+const (
+	ltCacheHit  = "cache:hit"  // already in cache
+	ltCacheElse = "cache:else" // 2nd cache hit
+	ltCacheCold = "cache:cold"
+
+	ltError = "error"
+)
+
+type logEntry struct {
+	cached      bool
+	drbdversion string
+	patch       string
+}
+
+func (s *server) logCacheInfo(msg string, l logEntry) {
+	s.logger.Info(msg,
+		zap.Bool("cached", l.cached),
+		zap.String("drbdversion", l.drbdversion),
+		zap.String("patch", l.patch),
+		zap.String("type", msg))
+	s.logger.Sync()
 }
