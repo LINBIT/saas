@@ -166,15 +166,16 @@ func (s *server) spatchCreate() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/text")
 
+		remoteAddr := r.RemoteAddr
 		drbdversion, ok := mux.Vars(r)["drbdversion"]
 		if !ok || drbdversion == "" || len(drbdversion) > 42 {
-			s.errorf(http.StatusBadRequest, w, "Could not get valid drbdversion parameter")
+			s.errorf(http.StatusBadRequest, remoteAddr, w, "Could not get valid drbdversion parameter")
 			return
 		}
 
 		patch, err := s.genPatch(r, drbdversion)
 		if err != nil {
-			s.errorf(http.StatusBadRequest, w, "Could not generate patch: %v", err)
+			s.errorf(http.StatusBadRequest, remoteAddr, w, "Could not generate patch: %v", err)
 			// TODO(rck): maybe from this point on internal server error? We would need to differentiate
 			return
 		}
@@ -305,6 +306,7 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 	logEntry := logEntry{
 		drbdversion: drbdversion,
 		patch:       patchName,
+		remoteAddr:  r.RemoteAddr,
 	}
 
 	s.pl.RLock()
@@ -358,11 +360,12 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 	return patch, nil
 }
 
-func (s *server) errorf(code int, w http.ResponseWriter, format string, a ...interface{}) {
+func (s *server) errorf(code int, remoteAddr string, w http.ResponseWriter, format string, a ...interface{}) {
 	w.WriteHeader(code)
 	_, _ = fmt.Fprintf(w, format, a...)
 	s.logger.Error(fmt.Sprintf(format, a...),
 		zap.String("type", ltError),
+		zap.String("remoteAddr", remoteAddr),
 		zap.Int("code", code))
 }
 
@@ -378,6 +381,7 @@ type logEntry struct {
 	cached      bool
 	drbdversion string
 	patch       string
+	remoteAddr  string
 }
 
 func (s *server) logCacheInfo(msg string, l logEntry) {
@@ -385,6 +389,7 @@ func (s *server) logCacheInfo(msg string, l logEntry) {
 		zap.Bool("cached", l.cached),
 		zap.String("drbdversion", l.drbdversion),
 		zap.String("patch", l.patch),
-		zap.String("type", msg))
+		zap.String("type", msg),
+		zap.String("remoteAddr", l.remoteAddr))
 	s.logger.Sync()
 }
