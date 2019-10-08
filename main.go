@@ -180,7 +180,7 @@ func (s *server) spatchCreate() http.HandlerFunc {
 			return
 		}
 
-		if _, err := fmt.Fprintf(w, string(patch)); err != nil {
+		if _, err := fmt.Fprint(w, string(patch)); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
