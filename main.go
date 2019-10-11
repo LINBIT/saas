@@ -23,14 +23,15 @@ import (
 )
 
 var (
-	flagAddr         = flag.String("addr", ":8080", "Server address")
-	flagPatchCache   = flag.String("patchcache", ".", "Path to the patch cache")
-	flagTarballCache = flag.String("tarcache", ".", "Path to the tarball cache")
-	flagMaxBytesBody = flag.Int("maxbytesbody", 250*1024, "Maximum nunber of bytes in the body")
-	flagKeepTmpDir   = flag.Bool("keeptmpdir", false, "Do not delete the temporary directory, useful for debugging")
-	flagCertFile     = flag.String("certfile", "", "Path to a TLS cert file")
-	flagKeyFile      = flag.String("keyfile", "", "Path to a TLS key file")
-	flagDebug        = flag.Bool("debug", false, "Enable debug logging (otherwise production level log)")
+	flagAddr             = flag.String("addr", ":8080", "Server address")
+	flagPatchCache       = flag.String("patchcache", ".", "Path to the patch cache")
+	flagTarballCache     = flag.String("tarcache", ".", "Path to the tarball cache")
+	flagMaxBytesBody     = flag.Int("maxbytesbody", 250*1024, "Maximum nunber of bytes in the body")
+	flagKeepTmpDir       = flag.Bool("keeptmpdir", false, "Do not delete the temporary directory, useful for debugging")
+	flagKeepFailedTmpDir = flag.Bool("keepfailedtmpdir", false, "Do not delete the temporary directory if patch generations failed, useful for debugging")
+	flagCertFile         = flag.String("certfile", "", "Path to a TLS cert file")
+	flagKeyFile          = flag.String("keyfile", "", "Path to a TLS key file")
+	flagDebug            = flag.Bool("debug", false, "Enable debug logging (otherwise production level log)")
 )
 
 const tarballURLBase = "https://www.linbit.com/downloads/drbd/"
@@ -49,8 +50,9 @@ type server struct {
 
 	pl, tl sync.RWMutex // patch lock/tarball lock
 
-	maxBytesBody int64
-	keepTmpDir   bool
+	maxBytesBody     int64
+	keepTmpDir       bool
+	keepFailedTmpDir bool
 
 	logger *zap.Logger
 }
@@ -71,8 +73,9 @@ func main() {
 		tarballCachePath: *flagTarballCache,
 		tarballCache:     make(map[string]struct{}),
 
-		maxBytesBody: int64(*flagMaxBytesBody),
-		keepTmpDir:   *flagKeepTmpDir,
+		maxBytesBody:     int64(*flagMaxBytesBody),
+		keepTmpDir:       *flagKeepTmpDir,
+		keepFailedTmpDir: *flagKeepFailedTmpDir,
 	}
 	// additional setup
 	var err error
@@ -249,8 +252,14 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 		return nil, fmt.Errorf("Could not create temporary directory: %v", err)
 	}
 
+	patchgenFailed := true
 	if !s.keepTmpDir {
-		defer func() { _ = os.RemoveAll(dir) }()
+		defer func() {
+			if s.keepFailedTmpDir && patchgenFailed { // keep it
+				return
+			}
+			_ = os.RemoveAll(dir)
+		}()
 	}
 
 	cmd := exec.Command("tar", "xf", tarballPath, "-C", dir)
@@ -284,6 +293,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 		return nil, fmt.Errorf("Could not successfully run 'make -C %s compat': %v", filepath.Join(dir, intarballName, "drbd"), err)
 	}
 
+	patchgenFailed = false
 	return ioutil.ReadFile(filepath.Join(cocciPath, "compat.patch"))
 }
 
