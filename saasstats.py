@@ -41,10 +41,16 @@ for line in io.TextIOWrapper(proc.stdout, encoding='utf-8'):
     locations[ip]['count'] += 1
 
 
-sortby = lambda k: locations[k]['country_name']
+def compargen(d, by):
+    def compar(key):
+        return d[key][by]
+    return compar
+
+
+sortby = compargen(locations, 'country_name')
 reverse = False
 if args.sortby == 'count':
-    sortby = lambda k: int(locations[k]['count'])
+    sortby = compargen(locations, 'count')
     reverse = True
 
 counts = 0
