@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 
+import argparse
 import io
 import json
-import os.path
 import subprocess
-import sys
 
 import geoip2.database
 
 georeadercity = geoip2.database.Reader('./GeoLite2-City.mmdb')
 georeadercountry = geoip2.database.Reader('./GeoLite2-Country.mmdb')
+
+parser = argparse.ArgumentParser(description='Process saas journal entries')
+parser.add_argument('--sortby', help='sort output by property',
+                    default='country', choices=('country', 'count'))
+parser.add_argument('--drbd-version', help='filter by drbd-version')
+args = parser.parse_args()
 
 proc = subprocess.Popen(['journalctl', '-u', 'saas', '--output=cat'], stdout=subprocess.PIPE)
 locations = {}
@@ -19,6 +24,8 @@ for line in io.TextIOWrapper(proc.stdout, encoding='utf-8'):
         linfo = json.loads(line)
         # remoteAddr contains IP:Port
         ip = linfo['remoteAddr'].split(':')[0].strip()
+        if args.drbd_version and linfo['drbdversion'] != args.drbd_version:
+            continue
     except Exception:
         continue
 
@@ -34,17 +41,11 @@ for line in io.TextIOWrapper(proc.stdout, encoding='utf-8'):
     locations[ip]['count'] += 1
 
 
-# default sort
 sortby = lambda k: locations[k]['country_name']
 reverse = False
-# lazy argparse
-if len(sys.argv) == 2:
-    if sys.argv[1] == '-h' or sys.argv[1] == '--help':
-        print("{} [--sortby=[country|count] (default is 'country')]".format(os.path.basename(sys.argv[0])))
-        sys.exit(0)
-    elif sys.argv[1] == '--sortby=count':
-        sortby = lambda k: int(locations[k]['count'])
-        reverse = True
+if args.sortby == 'count':
+    sortby = lambda k: int(locations[k]['count'])
+    reverse = True
 
 counts = 0
 keys = sorted(locations.keys(), key=sortby, reverse=reverse)
