@@ -61,4 +61,4 @@ for k in keys:
     counts += count
     print('{:15} ({:4}) {}/{}/{}'.format(k, count, v['country_name'], v['subdivision_name'], v['city']))
 
-print('Sum:', counts)
+print('Unique: {:7} ({:4})'.format(len(keys), counts))
