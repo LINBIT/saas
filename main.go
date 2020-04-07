@@ -22,6 +22,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var GitCommit string
+
 var (
 	flagAddr             = flag.String("addr", ":8080", "Server address")
 	flagPatchCache       = flag.String("patchcache", ".", "Path to the patch cache")
@@ -32,6 +34,7 @@ var (
 	flagCertFile         = flag.String("certfile", "", "Path to a TLS cert file")
 	flagKeyFile          = flag.String("keyfile", "", "Path to a TLS key file")
 	flagDebug            = flag.Bool("debug", false, "Enable debug logging (otherwise production level log)")
+	flagVersion          = flag.Bool("version", false, "Print version and exit")
 )
 
 const tarballURLBase = "https://www.linbit.com/downloads/drbd/"
@@ -59,6 +62,11 @@ type server struct {
 
 func main() {
 	flag.Parse()
+
+	if *flagVersion {
+		fmt.Printf("Git-commit: '%s'\n", GitCommit)
+		os.Exit(0)
+	}
 
 	if *flagMaxBytesBody < 0 {
 		log.Fatal("maxbytesbody has to be a positive value")
@@ -368,6 +376,16 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 
 	s.logCacheInfo(ltCacheCold, logEntry)
 	return patch, nil
+}
+
+func (s *server) hello() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/text")
+
+		if _, err := fmt.Fprintf(w, "Successfully connected to SPAAS ('%s')\n", GitCommit); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
 }
 
 func (s *server) errorf(code int, remoteAddr string, w http.ResponseWriter, format string, a ...interface{}) {
