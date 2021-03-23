@@ -201,7 +201,12 @@ func fetchDRBDTarball(tarballName, dst string) error {
 	vers := "9.0"
 	re := regexp.MustCompile(`^drbd-([0-9]+)\.([0-9]+)\..*\.tar\.gz$`)
 	if res := re.FindStringSubmatch(tarballName); res != nil {
-		vers = fmt.Sprintf("%s.%s", res[1], res[2])
+		major, minor := res[1], res[2]
+		if major == "9" && minor == "0" {
+			vers = fmt.Sprintf("%s.%s", major, minor)
+		} else {
+			vers = major
+		}
 	}
 
 	url := fmt.Sprintf("%s/%s/%s", tarballURLBase, vers, tarballName)
