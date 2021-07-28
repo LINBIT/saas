@@ -37,7 +37,7 @@ var (
 	flagVersion          = flag.Bool("version", false, "Print version and exit")
 )
 
-const tarballURLBase = "https://www.linbit.com/downloads/drbd/"
+const tarballURLBase = "https://pkg.linbit.com/downloads/drbd/"
 
 type server struct {
 	router *mux.Router
