@@ -282,7 +282,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 
 	// '_' is never an existing md5sum
 	cocciPath := filepath.Join(dir, intarballName, "drbd", "drbd-kernel-compat", "cocci_cache", "_")
-	if err := os.Mkdir(cocciPath, 0755); err != nil {
+	if err := os.MkdirAll(cocciPath, 0755); err != nil {
 		return nil, fmt.Errorf("Could not create cocci dir: %v", err)
 	}
 
