@@ -7,8 +7,9 @@ RUN make && mv ./saas /
 FROM ubuntu:jammy
 COPY --from=builder /saas /sbin
 RUN apt-get update && \
-	apt-get install -y coccinelle ca-certificates make gcc tar && \
-	apt-get -y clean
+	apt-get install -y coccinelle ca-certificates make gcc tar libpython3-dev && \
+	apt-get -y clean && \
+	update-alternatives --install /usr/bin/python python /usr/bin/python3 100
 RUN mkdir -p /var/cache/saas/patches /var/cache/saas/tarballs
 
 EXPOSE 2020
