@@ -291,7 +291,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 		return nil, fmt.Errorf("Could not write compath.h: %v", err)
 	}
 	// cheap check
-	cmd = exec.Command("gcc", "-o", "/dev/null", compathPath)
+	cmd = exec.Command("gcc", "-fsyntax-only", compathPath)
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("Could not precompile compat.h, looks like it is invalid: %v", err)
 	}
