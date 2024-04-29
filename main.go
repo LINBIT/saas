@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -280,15 +282,22 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 		return nil, fmt.Errorf("Could not extract tarball: %v", err)
 	}
 
-	// '_' is never an existing md5sum
-	cocciPath := filepath.Join(dir, intarballName, "drbd", "drbd-kernel-compat", "cocci_cache", "_")
+	compatDigest := md5.Sum(compath)
+	cocciPath := filepath.Join(dir, intarballName, "drbd", "drbd-kernel-compat", "cocci_cache", hex.EncodeToString(compatDigest[:]))
 	if err := os.MkdirAll(cocciPath, 0755); err != nil {
 		return nil, fmt.Errorf("Could not create cocci dir: %v", err)
 	}
 
+	// Check for collision with an existing patch. In practice this should never happen, as SAAS is only used in
+	// cases where the patch is not precomputed. Still, if it does happen, we only have to serve the existing patch.
+	compatPatchPath := filepath.Join(cocciPath, "compat.patch")
+	if _, err := os.Stat(compatPatchPath); err == nil {
+		return ioutil.ReadFile(compatPatchPath)
+	}
+
 	compathPath := filepath.Join(cocciPath, "compat.h")
 	if err := ioutil.WriteFile(compathPath, compath, 0644); err != nil {
-		return nil, fmt.Errorf("Could not write compath.h: %v", err)
+		return nil, fmt.Errorf("Could not write compat.h: %v", err)
 	}
 	// cheap check
 	cmd = exec.Command("gcc", "-fsyntax-only", compathPath)
@@ -307,7 +316,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 	}
 
 	patchgenFailed = false
-	return ioutil.ReadFile(filepath.Join(cocciPath, "compat.patch"))
+	return ioutil.ReadFile(compatPatchPath)
 }
 
 func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
