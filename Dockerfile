@@ -6,7 +6,7 @@ RUN make && mv ./saas /
 
 FROM fedora:40
 COPY --from=builder /saas /sbin
-RUN dnf install -y coccinelle make gcc tar python3-devel && \
+RUN dnf install -y coccinelle diffutils make gcc tar python3-devel && \
 	dnf clean all && rm -rf /var/cache/dnf
 RUN mkdir -p /var/cache/saas/patches /var/cache/saas/tarballs
 
