@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -262,7 +261,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 	}
 	s.tl.Unlock()
 
-	dir, err := ioutil.TempDir("", "saas")
+	dir, err := os.MkdirTemp("", "saas")
 	if err != nil {
 		return nil, fmt.Errorf("Could not create temporary directory: %v", err)
 	}
@@ -292,11 +291,11 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 	// cases where the patch is not precomputed. Still, if it does happen, we only have to serve the existing patch.
 	compatPatchPath := filepath.Join(cocciPath, "compat.patch")
 	if _, err := os.Stat(compatPatchPath); err == nil {
-		return ioutil.ReadFile(compatPatchPath)
+		return os.ReadFile(compatPatchPath)
 	}
 
 	compathPath := filepath.Join(cocciPath, "compat.h")
-	if err := ioutil.WriteFile(compathPath, compath, 0644); err != nil {
+	if err := os.WriteFile(compathPath, compath, 0644); err != nil {
 		return nil, fmt.Errorf("Could not write compat.h: %v", err)
 	}
 	// cheap check
@@ -305,7 +304,7 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 		return nil, fmt.Errorf("Could not precompile compat.h, looks like it is invalid: %v", err)
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(cocciPath, "kernelrelease.txt"), []byte{'_'}, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(cocciPath, "kernelrelease.txt"), []byte{'_'}, 0644); err != nil {
 		return nil, fmt.Errorf("Could not write kernelrelease.txt: %v", err)
 	}
 
@@ -316,11 +315,11 @@ func (s *server) newPatch(body []byte, drbdversion string) ([]byte, error) {
 	}
 
 	patchgenFailed = false
-	return ioutil.ReadFile(compatPatchPath)
+	return os.ReadFile(compatPatchPath)
 }
 
 func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +346,7 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 	if cached {
 		s.logCacheInfo(ltCacheHit, logEntry)
 		s.pl.RUnlock()
-		return ioutil.ReadFile(patchPath)
+		return os.ReadFile(patchPath)
 	}
 	s.pl.RUnlock()
 
@@ -376,7 +375,7 @@ func (s *server) genPatch(r *http.Request, drbdversion string) ([]byte, error) {
 			return patch, nil
 		}
 	}
-	if err := ioutil.WriteFile(patchPath, patch, 0644); err != nil {
+	if err := os.WriteFile(patchPath, patch, 0644); err != nil {
 		// remove file so it does not land in the cache next time
 		if st, err := os.Stat(patchPath); err != nil && st.Mode().IsRegular() {
 			if err := os.Remove(patchPath); err != nil {
